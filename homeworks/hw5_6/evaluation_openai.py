@@ -23,6 +23,14 @@ style_matching_metric_geval = GEval(
     evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT, LLMTestCaseParams.EXPECTED_OUTPUT]
 )
 
+humor_quality_metric = GEval(
+    name="Humor Quality",
+    criteria="Оцени, насколько последняя фраза (actual output) смешная. "
+             "Учитывай качество шутки, её оригинальность, уместность и способность вызвать улыбку. "
+             "Ответ должен быть логичным и доставлять удовольствие при чтении.",
+    evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT, LLMTestCaseParams.EXPECTED_OUTPUT]
+)
+
 system_message1 = {"role": "system",
                    "content": "Ты чат бот, который генерирует анекдоты. "
                               "Продолжи диалог одной репликой так, чтоб получился анекдот. "
@@ -87,6 +95,8 @@ def get_model_predictions(gt_examples, system_message):
 def evaluate_metrics(gt_examples, predicted_examples1, predicted_examples2):
     scores1 = []
     scores2 = []
+    scores1_quality = []
+    scores2_quality = []
 
     for i_example in range(len(gt_examples)):
         test_case1 = LLMTestCase(
@@ -108,7 +118,15 @@ def evaluate_metrics(gt_examples, predicted_examples1, predicted_examples2):
         predicted_examples2[i_example]['fun_score'] = style_matching_metric_geval.score
         scores2.append(style_matching_metric_geval.score)
 
-    return gt_examples, predicted_examples1, predicted_examples2, scores1, scores2
+        humor_quality_metric.measure(test_case1)
+        predicted_examples1[i_example]['humor_quality'] = humor_quality_metric.score
+        scores1_quality.append(humor_quality_metric.score)
+
+        humor_quality_metric.measure(test_case2)
+        predicted_examples2[i_example]['humor_quality'] = humor_quality_metric.score
+        scores2_quality.append(humor_quality_metric.score)
+
+    return gt_examples, predicted_examples1, predicted_examples2, scores1, scores2, scores1_quality, scores2_quality
 
 
 def main(args):
@@ -125,9 +143,8 @@ def main(args):
         print(predicted_examples1[i_example])
         print(predicted_examples2[i_example])
         print("-----------")
-    gt_examples, predicted_examples1, predicted_examples2, scores1, scores2 = evaluate_metrics(gt_examples,
-                                                                                               predicted_examples1,
-                                                                                               predicted_examples2)
+    gt_examples, predicted_examples1, predicted_examples2, scores1, scores2, scores1_quality, scores2_quality = (
+        evaluate_metrics(gt_examples, predicted_examples1, predicted_examples2))
 
     print("=============== GT and Predicted EXAMPLES with METRICS ======================")
     for i_example in range(len(gt_examples)):
@@ -144,10 +161,19 @@ def main(args):
     print("SCORE2:", np.mean(scores2), scores2)
     print("TTEST2:", ttest_res2)
 
+    print("*********=============== My metrics ======================*********")
+
+    print("SCORE1 Humor Quality:", np.mean(scores1_quality), scores1_quality)
+    print("TTEST1 Humor Quality:", ttest_1samp(scores1_quality, 0.5))
+    print("SCORE2 Humor Quality:", np.mean(scores2_quality), scores2_quality)
+    print("TTEST2 Humor Quality:", ttest_1samp(scores2_quality, 0.5))
+
     rel_ttest_res = ttest_rel(scores1, scores2)
 
     print("=============== Rel Scores ======================")
-    print("TTEST:", rel_ttest_res)
+    print("TTEST style:", rel_ttest_res)
+    print("TTEST Humor Quality:", ttest_rel(scores1_quality, scores2_quality))
+    print("*********=============== My metrics ======================*********")
 
 
 if __name__ == '__main__':
